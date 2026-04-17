@@ -67,3 +67,17 @@ export interface SubmitResponse {
   game_id: string;
   status: string;
 }
+
+export interface GameListItem {
+  game_id: string;
+  status: "pending" | "processing" | "done" | "failed";
+  source: "chess_com" | "manual_pgn";
+  white_player: string | null;
+  black_player: string | null;
+  user_color: "white" | "black" | null;
+  result: string | null;
+  opening_name: string | null;
+  eco_code: string | null;
+  played_at: string | null;
+  created_at: string;
+}

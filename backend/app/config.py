@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # Chess.com API base
     chess_com_api_base: str = "https://api.chess.com/pub"
 
+    # Auth
+    jwt_secret_key: str = "change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_days: int = 30
+    google_client_id: str = ""  # set GOOGLE_CLIENT_ID in .env
+
     # App
     debug: bool = False
     # Comma-separated in env: CORS_ORIGINS=https://sochmate.app,https://www.sochmate.app

@@ -2,52 +2,43 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { listMyGames, getGame } from "@/lib/api";
-import { getSessionToken } from "@/lib/session";
-import type { GameData, GameStatusData } from "@/types/analysis";
-
-type GamePreview = {
-  status: GameStatusData;
-  detail: GameData | null;
-};
+import { useRouter } from "next/navigation";
+import { listMyGames, ApiError } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import type { GameListItem } from "@/types/analysis";
 
 export default function GamesClient() {
-  const [games, setGames] = useState<GamePreview[]>([]);
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const [games, setGames] = useState<GameListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+
     async function load() {
       try {
-        const token = getSessionToken();
-        const statuses = await listMyGames(token);
-
-        // Fetch full details for done games (for player names + accuracy)
-        const previews = await Promise.all(
-          statuses.map(async (s): Promise<GamePreview> => {
-            if (s.status === "done") {
-              try {
-                const detail = await getGame(s.game_id);
-                return { status: s, detail };
-              } catch {
-                return { status: s, detail: null };
-              }
-            }
-            return { status: s, detail: null };
-          })
-        );
-
-        setGames(previews);
-      } catch {
-        setError("Could not load your games. Try refreshing.");
+        const items = await listMyGames();
+        setGames(items);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          router.replace("/login");
+        } else {
+          setError("Could not load your games. Try refreshing.");
+        }
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, []);
+  }, [authLoading, user, router]);
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="py-20 text-center" style={{ color: "var(--text-secondary)" }}>
         Loading your games…
@@ -76,10 +67,7 @@ export default function GamesClient() {
         <Link
           href="/"
           className="text-sm px-4 py-2 rounded-lg font-medium"
-          style={{
-            background: "var(--accent)",
-            color: "#fff",
-          }}
+          style={{ background: "var(--accent)", color: "#fff" }}
         >
           + Analyze New Game
         </Link>
@@ -103,8 +91,8 @@ export default function GamesClient() {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {games.map(({ status, detail }) => (
-            <GameCard key={status.game_id} status={status} detail={detail} />
+          {games.map((game) => (
+            <GameCard key={game.game_id} game={game} />
           ))}
         </div>
       )}
@@ -112,46 +100,19 @@ export default function GamesClient() {
   );
 }
 
-function GameCard({
-  status,
-  detail,
-}: {
-  status: GameStatusData;
-  detail: GameData | null;
-}) {
-  const isPending = status.status !== "done" && status.status !== "failed";
-  const isFailed = status.status === "failed";
+function GameCard({ game }: { game: GameListItem }) {
+  const isPending = game.status !== "done" && game.status !== "failed";
+  const isFailed = game.status === "failed";
 
-  const userColor = detail?.user_color ?? "white";
+  const userColor = game.user_color ?? "white";
   const playerName =
-    userColor === "white" ? detail?.white_player : detail?.black_player;
+    userColor === "white" ? game.white_player : game.black_player;
   const opponentName =
-    userColor === "white" ? detail?.black_player : detail?.white_player;
-
-  const accuracy =
-    detail?.summary
-      ? userColor === "white"
-        ? detail.summary.accuracy_white
-        : detail.summary.accuracy_black
-      : null;
-
-  const blunders =
-    detail?.summary
-      ? userColor === "white"
-        ? detail.summary.blunders_white
-        : detail.summary.blunders_black
-      : null;
-
-  const mistakes =
-    detail?.summary
-      ? userColor === "white"
-        ? detail.summary.mistakes_white
-        : detail.summary.mistakes_black
-      : null;
+    userColor === "white" ? game.black_player : game.white_player;
 
   return (
     <Link
-      href={`/analyze/${status.game_id}`}
+      href={`/analyze/${game.game_id}`}
       className="block rounded-xl p-4 transition-colors"
       style={{
         background: "var(--surface)",
@@ -160,7 +121,6 @@ function GameCard({
       }}
     >
       <div className="flex items-center justify-between gap-4">
-        {/* Left: players + opening */}
         <div className="flex flex-col gap-1 min-w-0">
           <div className="flex items-center gap-2">
             <span
@@ -169,13 +129,18 @@ function GameCard({
             >
               {playerName ?? "You"} vs {opponentName ?? "Opponent"}
             </span>
-            {detail?.result && detail.result !== "*" && (
-              <ResultChip result={detail.result} userColor={userColor} />
+            {game.result && game.result !== "*" && (
+              <ResultChip result={game.result} userColor={userColor} />
             )}
           </div>
-          {detail?.opening_name && (
+          {game.opening_name && (
             <span className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>
-              {detail.opening_name}
+              {game.opening_name}
+            </span>
+          )}
+          {game.eco_code && !game.opening_name && (
+            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              {game.eco_code}
             </span>
           )}
           {isFailed && (
@@ -190,30 +155,9 @@ function GameCard({
           )}
         </div>
 
-        {/* Right: accuracy + mistake counts */}
-        {accuracy !== null && (
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <span
-              className="text-lg font-bold tabular-nums"
-              style={{
-                color:
-                  accuracy >= 85
-                    ? "#22c55e"
-                    : accuracy >= 65
-                    ? "#fbbf24"
-                    : "#ef4444",
-              }}
-            >
-              {accuracy?.toFixed(0)}%
-            </span>
-            {(blunders !== null || mistakes !== null) && (
-              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                {blunders} blunder{blunders !== 1 ? "s" : ""} · {mistakes} mistake
-                {mistakes !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-        )}
+        <span className="text-xs shrink-0" style={{ color: "var(--text-secondary)" }}>
+          {game.status === "done" ? "View →" : ""}
+        </span>
       </div>
     </Link>
   );

@@ -31,7 +31,7 @@ export default function Home() {
 
         {/* Sub-note */}
         <p className="text-center text-xs" style={{ color: "var(--text-secondary)" }}>
-          No account needed · Analysis takes ~20 seconds · Results saved for your session
+          Free account required · Analysis takes ~20 seconds · Games saved to your profile
         </p>
       </div>
     </div>

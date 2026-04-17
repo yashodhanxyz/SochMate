@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { AuthProvider } from "@/contexts/AuthContext";
+import GoogleProvider from "@/components/GoogleProvider";
+import NavBar from "@/components/NavBar";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,30 +17,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen antialiased">
-        <header
-          style={{
-            borderBottom: "1px solid var(--border)",
-            background: "var(--surface)",
-          }}
-        >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-            <Link
-              href="/"
-              className="text-lg font-semibold tracking-tight"
-              style={{ color: "var(--text-primary)" }}
-            >
-              ♟ SochMate
-            </Link>
-            <Link
-              href="/games"
-              className="text-sm"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              My Games
-            </Link>
-          </div>
-        </header>
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">{children}</main>
+        <GoogleProvider>
+          <AuthProvider>
+            <NavBar />
+            <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">{children}</main>
+          </AuthProvider>
+        </GoogleProvider>
       </body>
     </html>
   );

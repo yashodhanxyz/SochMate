@@ -17,7 +17,6 @@ class GameSubmitRequest(BaseModel):
     """
     input: str                          # Chess.com URL or raw PGN
     user_color: str | None = None       # 'white' | 'black' | None (auto-detect)
-    session_token: str | None = None    # anonymous session token from frontend
 
     @field_validator("user_color")
     @classmethod
@@ -100,3 +99,20 @@ class GameSubmitResponse(BaseModel):
     """Returned immediately after submitting a game for analysis."""
     game_id: uuid.UUID
     status: str
+
+
+class GameListItemResponse(BaseModel):
+    """Lightweight game summary for the dashboard list."""
+    game_id: uuid.UUID
+    status: str
+    source: str
+    white_player: str | None
+    black_player: str | None
+    user_color: str | None
+    result: str | None
+    opening_name: str | None
+    eco_code: str | None
+    played_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

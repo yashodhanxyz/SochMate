@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { submitGame, ApiError } from "@/lib/api";
-import { getSessionToken } from "@/lib/session";
+import { useAuth } from "@/contexts/AuthContext";
 
 type UserColor = "white" | "black" | null;
 
 export default function GameInput() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+
   const [input, setInput] = useState("");
   const [userColor, setUserColor] = useState<UserColor>(null);
   const [loading, setLoading] = useState(false);
@@ -18,14 +21,13 @@ export default function GameInput() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || !user) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const token = getSessionToken();
-      const result = await submitGame(input.trim(), userColor, token);
+      const result = await submitGame(input.trim(), userColor);
       router.push(`/analyze/${result.game_id}`);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -35,6 +37,37 @@ export default function GameInput() {
       }
       setLoading(false);
     }
+  }
+
+  // Show sign-in prompt if not authenticated
+  if (!authLoading && !user) {
+    return (
+      <div className="flex flex-col items-center gap-4 py-4">
+        <p className="text-sm text-center" style={{ color: "var(--text-secondary)" }}>
+          Sign in to analyze games and track your improvement.
+        </p>
+        <div className="flex gap-3">
+          <Link
+            href="/login"
+            className="px-4 py-2 rounded-lg text-sm font-medium"
+            style={{
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              color: "var(--text-primary)",
+            }}
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/register"
+            className="px-4 py-2 rounded-lg text-sm font-medium"
+            style={{ background: "var(--accent)", color: "#fff" }}
+          >
+            Create free account
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -64,16 +97,12 @@ export default function GameInput() {
             color: "var(--text-primary)",
             minHeight: "120px",
           }}
-          onFocus={(e) =>
-            (e.currentTarget.style.borderColor = "var(--accent)")
-          }
-          onBlur={(e) =>
-            (e.currentTarget.style.borderColor = "var(--border)")
-          }
+          onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
+          onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
         />
       </div>
 
-      {/* Color selector — show for URLs where we can infer, always show for PGN */}
+      {/* Color selector */}
       <div className="flex flex-col gap-2">
         <span
           className="text-sm font-medium"

@@ -9,7 +9,7 @@ alembic==1.13.1
 psycopg2-binary==2.9.9
 
 # Validation
-pydantic==2.7.1
+pydantic[email]==2.7.1
 pydantic-settings==2.2.1
 
 # Chess
@@ -21,6 +21,11 @@ redis==5.0.4
 
 # HTTP client (Chess.com API)
 httpx==0.27.0
+
+# Auth
+PyJWT==2.8.0
+bcrypt==5.0.0
+google-auth==2.29.0
 
 # Dev / testing
 pytest==8.2.0

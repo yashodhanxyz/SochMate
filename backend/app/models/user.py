@@ -16,6 +16,7 @@ class User(Base):
     )
     session_token: Mapped[str | None] = mapped_column(String, unique=True, index=True)
     email: Mapped[str | None] = mapped_column(String, unique=True, index=True)
+    hashed_password: Mapped[str | None] = mapped_column(String)
     username: Mapped[str | None] = mapped_column(String)
     chess_com_username: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(

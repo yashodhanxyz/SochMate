@@ -2,9 +2,9 @@
 Games API router.
 
 Endpoints:
-  POST /api/games           — submit a game for analysis
-  GET  /api/games/{id}      — get full analysis result
-  GET  /api/games/{id}/status — lightweight status poll
+  POST /api/games           — submit a game for analysis (requires auth)
+  GET  /api/games/{id}      — get full analysis result (public)
+  GET  /api/games/{id}/status — lightweight status poll (public)
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.game import Game
 from app.models.user import User
@@ -39,6 +40,7 @@ router = APIRouter()
 @router.post("", response_model=GameSubmitResponse, status_code=202)
 async def submit_game(
     body: GameSubmitRequest,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -47,8 +49,6 @@ async def submit_game(
     Returns the game_id and status='pending' immediately.
     The client should poll GET /api/games/{id}/status until status='done'.
     """
-    user = await _get_or_create_user(db, body.session_token)
-
     # --- Resolve PGN ---
     chess_com_game_id: str | None = None
 
@@ -73,7 +73,7 @@ async def submit_game(
         existing = await db.scalar(
             select(Game).where(
                 Game.chess_com_game_id == chess_com_game_id,
-                Game.user_id == user.id,
+                Game.user_id == current_user.id,
             )
         )
         if existing and existing.status == "done":
@@ -81,8 +81,8 @@ async def submit_game(
 
     # Infer user_color from Chess.com username if not provided
     user_color = body.user_color
-    if user_color is None and user.chess_com_username:
-        username = user.chess_com_username.lower()
+    if user_color is None and current_user.chess_com_username:
+        username = current_user.chess_com_username.lower()
         if parsed.white_player and parsed.white_player.lower() == username:
             user_color = "white"
         elif parsed.black_player and parsed.black_player.lower() == username:
@@ -90,7 +90,7 @@ async def submit_game(
 
     # --- Create Game row ---
     game = Game(
-        user_id=user.id,
+        user_id=current_user.id,
         pgn_raw=pgn_raw,
         source=source,
         chess_com_game_id=chess_com_game_id,
@@ -184,29 +184,3 @@ async def get_game(
         moves=game.moves,
         summary=game.summary,
     )
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-async def _get_or_create_user(db: AsyncSession, session_token: str | None) -> User:
-    """
-    Find an existing user by session token, or create a new anonymous one.
-    In V2, this will be replaced by JWT-based auth middleware.
-    """
-    if session_token:
-        user = await db.scalar(
-            select(User).where(User.session_token == session_token)
-        )
-        if user:
-            return user
-
-    # Create a new anonymous user
-    import secrets
-    token = session_token or secrets.token_urlsafe(32)
-    user = User(session_token=token)
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
