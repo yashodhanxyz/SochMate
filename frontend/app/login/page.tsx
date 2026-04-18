@@ -7,13 +7,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, user, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Already authenticated — bounce to games
+  if (!authLoading && user) {
+    router.replace("/games");
+    return null;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

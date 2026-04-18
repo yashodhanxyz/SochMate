@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # Auth
     jwt_secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
-    jwt_expire_days: int = 30
+    jwt_expire_days: int = 90
     google_client_id: str = ""  # set GOOGLE_CLIENT_ID in .env
 
     # App

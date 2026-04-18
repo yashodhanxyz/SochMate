@@ -69,6 +69,20 @@ export interface SubmitResponse {
   status: string;
 }
 
+export interface ImportChessComResponse {
+  username: string;
+  queued: number;
+  skipped: number;
+}
+
+export interface ColorStats {
+  games_played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  avg_accuracy: number | null;
+}
+
 export interface OpeningStatsItem {
   opening_name: string | null;
   eco_code: string | null;
@@ -77,6 +91,10 @@ export interface OpeningStatsItem {
   draws: number;
   losses: number;
   avg_accuracy: number | null;
+  is_gambit: boolean;
+  gambit_color: "white" | "black" | null;
+  as_white: ColorStats | null;
+  as_black: ColorStats | null;
 }
 
 export interface GameListItem {

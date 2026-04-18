@@ -50,6 +50,13 @@ export default function NavBar() {
                   >
                     Openings
                   </Link>
+                  <Link
+                    href="/gambits"
+                    className="text-sm hidden sm:block"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Gambits
+                  </Link>
                   <div className="flex items-center gap-3">
                     <span
                       className="text-sm hidden sm:block"

@@ -16,7 +16,8 @@ from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.game import Game
 from app.models.user import User
-from app.schemas.game import GameListItemResponse, OpeningStatsItem
+from app.schemas.game import ColorStats, GameListItemResponse, OpeningStatsItem
+from app.services.opening import get_gambit_info
 
 router = APIRouter()
 
@@ -86,24 +87,32 @@ async def get_opening_stats(
     # Aggregate in Python — group by (opening_name, eco_code)
     from collections import defaultdict
 
+    def _empty_color_bucket() -> dict:
+        return {"wins": 0, "draws": 0, "losses": 0, "acc_sum": 0.0, "acc_count": 0}
+
     buckets: dict[tuple, dict] = defaultdict(lambda: {
-        "wins": 0, "draws": 0, "losses": 0, "accuracy_sum": 0.0, "accuracy_count": 0
+        "wins": 0, "draws": 0, "losses": 0, "acc_sum": 0.0, "acc_count": 0,
+        "white": _empty_color_bucket(),
+        "black": _empty_color_bucket(),
     })
 
     for g in games:
         key = (g.opening_name, g.eco_code)
         b = buckets[key]
+        color = g.user_color or "white"
+        cb = b[color]
 
-        # Result from user's perspective
-        if g.result == "1/2-1/2":
-            b["draws"] += 1
-        elif (g.result == "1-0" and g.user_color == "white") or \
-             (g.result == "0-1" and g.user_color == "black"):
-            b["wins"] += 1
+        won  = (g.result == "1-0" and g.user_color == "white") or \
+               (g.result == "0-1" and g.user_color == "black")
+        drew = g.result == "1/2-1/2"
+
+        if won:
+            b["wins"]  += 1;  cb["wins"]  += 1
+        elif drew:
+            b["draws"] += 1;  cb["draws"] += 1
         else:
-            b["losses"] += 1
+            b["losses"]+= 1;  cb["losses"]+= 1
 
-        # Accuracy for the user's color
         if g.summary:
             acc = (
                 g.summary.accuracy_white
@@ -111,17 +120,33 @@ async def get_opening_stats(
                 else g.summary.accuracy_black
             )
             if acc is not None:
-                b["accuracy_sum"] += float(acc)
-                b["accuracy_count"] += 1
+                acc_f = float(acc)
+                b["acc_sum"]   += acc_f;  b["acc_count"]   += 1
+                cb["acc_sum"]  += acc_f;  cb["acc_count"]  += 1
+
+    def _build_color_stats(cb: dict) -> ColorStats | None:
+        gp = cb["wins"] + cb["draws"] + cb["losses"]
+        if gp == 0:
+            return None
+        return ColorStats(
+            games_played=gp,
+            wins=cb["wins"],
+            draws=cb["draws"],
+            losses=cb["losses"],
+            avg_accuracy=(
+                round(cb["acc_sum"] / cb["acc_count"], 1)
+                if cb["acc_count"] > 0 else None
+            ),
+        )
 
     items = []
     for (opening_name, eco_code), b in buckets.items():
         games_played = b["wins"] + b["draws"] + b["losses"]
         avg_accuracy = (
-            round(b["accuracy_sum"] / b["accuracy_count"], 1)
-            if b["accuracy_count"] > 0
-            else None
+            round(b["acc_sum"] / b["acc_count"], 1)
+            if b["acc_count"] > 0 else None
         )
+        is_gambit, gambit_color = get_gambit_info(eco_code, opening_name)
         items.append(OpeningStatsItem(
             opening_name=opening_name,
             eco_code=eco_code,
@@ -130,8 +155,11 @@ async def get_opening_stats(
             draws=b["draws"],
             losses=b["losses"],
             avg_accuracy=avg_accuracy,
+            is_gambit=is_gambit,
+            gambit_color=gambit_color,
+            as_white=_build_color_stats(b["white"]),
+            as_black=_build_color_stats(b["black"]),
         ))
 
-    # Sort by games played descending
     items.sort(key=lambda x: x.games_played, reverse=True)
     return items

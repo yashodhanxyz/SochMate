@@ -2,6 +2,7 @@ import type {
   GameData,
   GameListItem,
   GameStatusData,
+  ImportChessComResponse,
   OpeningStatsItem,
   SubmitResponse,
 } from "@/types/analysis";
@@ -64,4 +65,14 @@ export async function listMyGames(): Promise<GameListItem[]> {
 
 export async function getOpeningStats(): Promise<OpeningStatsItem[]> {
   return request<OpeningStatsItem[]>("/api/users/me/openings");
+}
+
+export async function importChessCom(
+  username: string,
+  maxGames: number
+): Promise<ImportChessComResponse> {
+  return request<ImportChessComResponse>("/api/imports/chess-com", {
+    method: "POST",
+    body: JSON.stringify({ username, max_games: maxGames }),
+  });
 }

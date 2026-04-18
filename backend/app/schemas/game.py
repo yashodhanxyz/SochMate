@@ -102,6 +102,26 @@ class GameSubmitResponse(BaseModel):
     status: str
 
 
+class ImportChessComRequest(BaseModel):
+    username: str
+    max_games: int = 20   # how many new games to queue (capped at 100 server-side)
+
+
+class ImportChessComResponse(BaseModel):
+    username: str          # normalised (lowercased) username as returned by Chess.com
+    queued: int            # new games queued for analysis
+    skipped: int           # games already in the user's library
+
+
+class ColorStats(BaseModel):
+    """Performance stats for one color (white or black)."""
+    games_played: int
+    wins: int
+    draws: int
+    losses: int
+    avg_accuracy: float | None
+
+
 class OpeningStatsItem(BaseModel):
     """Aggregated performance stats for a single opening."""
     opening_name: str | None
@@ -111,6 +131,12 @@ class OpeningStatsItem(BaseModel):
     draws: int
     losses: int
     avg_accuracy: float | None
+    # Gambit metadata
+    is_gambit: bool = False
+    gambit_color: str | None = None   # "white" | "black" — who plays the gambit
+    # Per-color breakdown
+    as_white: ColorStats | None = None
+    as_black: ColorStats | None = None
 
 
 class GameListItemResponse(BaseModel):

@@ -201,30 +201,44 @@ def _find_game_in_archive(username: str, year: int, month: int, game_id: str) ->
 
 
 # ---------------------------------------------------------------------------
-# Documented monthly archive (used for bulk import, V2)
+# Bulk import helpers
 # ---------------------------------------------------------------------------
 
-def fetch_player_games_pgn(username: str, year: int, month: int) -> list[str]:
+def fetch_archives(username: str) -> list[str]:
     """
-    Fetch all games for a player in a given month.
-    Returns a list of PGN strings (one per game).
+    Return the list of monthly archive URLs for a player, newest first.
+    Raises ChessComError if the username is not found or the API fails.
     """
-    endpoint = f"{settings.chess_com_api_base}/player/{username}/games/{year}/{month:02d}"
+    endpoint = f"{settings.chess_com_api_base}/player/{username}/games/archives"
     try:
-        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
             r = client.get(endpoint, headers={"User-Agent": _USER_AGENT})
     except httpx.RequestError as exc:
-        raise ChessComError(f"Network error fetching games for {username}: {exc}") from exc
+        raise ChessComError(f"Network error reaching Chess.com: {exc}") from exc
 
     if r.status_code == 404:
         raise ChessComError(
-            f"No games found for player '{username}' in {year}/{month:02d}. "
-            "Check the username and date."
+            f"Player '{username}' not found on Chess.com. "
+            "Check the spelling — usernames are case-insensitive."
         )
     if r.status_code != 200:
-        raise ChessComError(
-            f"Chess.com API returned {r.status_code} for player {username}."
-        )
+        raise ChessComError(f"Chess.com API returned {r.status_code} for player '{username}'.")
 
-    games = r.json().get("games", [])
-    return [g["pgn"] for g in games if "pgn" in g]
+    archives = r.json().get("archives", [])
+    return list(reversed(archives))   # newest month first
+
+
+def fetch_archive_games(archive_url: str) -> list[dict]:
+    """
+    Fetch raw game dicts from a monthly archive URL.
+    Returns an empty list on any failure (best-effort).
+    Each dict contains at minimum: url, pgn, white{username,rating}, black{username,rating}.
+    """
+    try:
+        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+            r = client.get(archive_url, headers={"User-Agent": _USER_AGENT})
+        if r.status_code != 200:
+            return []
+        return r.json().get("games", [])
+    except Exception:
+        return []

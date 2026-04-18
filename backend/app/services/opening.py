@@ -267,6 +267,55 @@ def _build_lookup() -> dict[str, tuple[str, str]]:
 # Module-level singleton — built once on first import
 _EPD_LOOKUP: dict[str, tuple[str, str]] = _build_lookup()
 
+# ---------------------------------------------------------------------------
+# Gambit metadata
+# ---------------------------------------------------------------------------
+
+# ECO code → which color PLAYS (initiates) the gambit
+_GAMBIT_PLAYER: dict[str, str] = {
+    "A09": "white",   # Réti Gambit
+    "A51": "black",   # Budapest Gambit
+    "A52": "black",   # Budapest Gambit, Rubinstein
+    "A57": "black",   # Benko Gambit
+    "B21": "white",   # Sicilian, Smith-Morra Gambit
+    "C27": "white",   # Vienna Game, Adams' Gambit
+    "C30": "white",   # King's Gambit
+    "C31": "white",   # King's Gambit Declined
+    "C33": "white",   # King's Gambit Accepted
+    "C34": "white",   # King's Gambit Accepted, Fischer Def
+    "C51": "white",   # Evans Gambit
+    "C56": "white",   # Two Knights, Max Lange Attack
+    "C57": "white",   # Two Knights, Fried Liver Attack
+    "C67": "white",   # Ruy Lopez, Rio Gambit
+    "C89": "black",   # Ruy Lopez, Marshall Attack (Black gambits)
+    "D06": "white",   # Queen's Gambit
+    "D07": "white",   # Queen's Gambit, Chigorin
+    "D08": "black",   # Albin Counter-Gambit
+    "D20": "white",   # Queen's Gambit Accepted
+    "D26": "white",   # QGA, Classical
+}
+
+
+def get_gambit_info(
+    eco_code: str | None,
+    opening_name: str | None,
+) -> tuple[bool, str | None]:
+    """
+    Return (is_gambit, gambit_player_color).
+
+    is_gambit      — True when the opening is a gambit (name contains "Gambit"
+                     or ECO code is in the explicit lookup).
+    gambit_player_color — "white" | "black" | None (unknown)
+    """
+    name_is_gambit = bool(opening_name and "gambit" in opening_name.lower())
+    eco_player = _GAMBIT_PLAYER.get(eco_code or "")
+    is_gambit = name_is_gambit or bool(eco_player)
+
+    if not is_gambit:
+        return False, None
+
+    return True, eco_player  # may be None for name-matched gambits we don't have a color for
+
 
 # ---------------------------------------------------------------------------
 # Public API

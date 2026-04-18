@@ -4,6 +4,7 @@
  */
 
 const TOKEN_KEY = "sochmate_token";
+const USER_KEY  = "sochmate_user";
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export interface AuthUser {
@@ -35,6 +36,22 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
+// Cached user profile — avoids a server round-trip on every page load
+export function getStoredUser(): AuthUser | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? (JSON.parse(raw) as AuthUser) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredUser(user: AuthUser): void {
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 // ---------------------------------------------------------------------------

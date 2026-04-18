@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { listMyGames, ApiError } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import type { GameListItem } from "@/types/analysis";
+import ImportChessCom from "@/components/ImportChessCom";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -247,22 +248,27 @@ export default function GamesClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const loadGames = useCallback(async () => {
+    try {
+      setGames(await listMyGames());
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) router.replace("/login");
+      else setError("Could not load your games. Try refreshing.");
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.replace("/login"); return; }
+    loadGames();
+  }, [authLoading, user, router, loadGames]);
 
-    async function load() {
-      try {
-        setGames(await listMyGames());
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 401) router.replace("/login");
-        else setError("Could not load your games. Try refreshing.");
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [authLoading, user, router]);
+  // Called after a successful Chess.com import — refresh the list
+  const handleImported = useCallback(() => {
+    loadGames();
+  }, [loadGames]);
 
   if (authLoading || loading) {
     return <div className="py-20 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</div>;
@@ -296,6 +302,9 @@ export default function GamesClient() {
           + Analyze New
         </Link>
       </div>
+
+      {/* Chess.com import card */}
+      <ImportChessCom onImported={handleImported} />
 
       {games.length === 0 ? (
         <div

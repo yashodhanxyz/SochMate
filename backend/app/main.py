@@ -29,11 +29,12 @@ app.add_middleware(
 )
 
 # Routers registered here as they are built
-from app.api import auth, games, users  # noqa: E402
+from app.api import auth, games, imports, users  # noqa: E402
 
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(games.router, prefix="/api/games", tags=["games"])
-app.include_router(users.router, prefix="/api/users", tags=["users"])
+app.include_router(auth.router,    prefix="/api/auth",    tags=["auth"])
+app.include_router(games.router,   prefix="/api/games",   tags=["games"])
+app.include_router(imports.router, prefix="/api/imports", tags=["imports"])
+app.include_router(users.router,   prefix="/api/users",   tags=["users"])
 
 
 @app.get("/health")
