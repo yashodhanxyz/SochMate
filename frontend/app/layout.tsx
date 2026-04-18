@@ -7,6 +7,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "SochMate — Chess Analysis",
   description: "Analyze your chess games move by move and improve over time.",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

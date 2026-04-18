@@ -2,10 +2,8 @@
 
 import { useEffect } from "react";
 import dynamic from "next/dynamic";
-import type { MoveData } from "@/types/analysis";
+import type { MoveData, MoveClassification } from "@/types/analysis";
 import EvalBar from "./EvalBar";
-
-type Arrow = { startSquare: string; endSquare: string; color: string };
 
 // react-chessboard uses browser APIs — must be dynamically imported with ssr:false
 const Chessboard = dynamic(
@@ -16,11 +14,49 @@ const Chessboard = dynamic(
 const STARTING_FEN =
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
+// Arrow colours keyed by classification severity
+const PLAYED_ARROW_COLOR: Record<string, string> = {
+  blunder:    "rgba(239, 68,  68,  0.85)", // red
+  mistake:    "rgba(249, 115, 22,  0.85)", // orange
+  inaccuracy: "rgba(251, 191, 36,  0.80)", // amber
+};
+const BEST_ARROW_COLOR = "rgba(34, 197, 94, 0.85)";   // green
+
+interface Arrow { startSquare: string; endSquare: string; color: string }
+
+function uciToArrow(uci: string, color: string): Arrow {
+  return { startSquare: uci.slice(0, 2), endSquare: uci.slice(2, 4), color };
+}
+
+function buildArrows(move: MoveData | null): Arrow[] {
+  if (!move) return [];
+
+  const cls = move.classification as MoveClassification | null;
+  const playedColor = cls ? PLAYED_ARROW_COLOR[cls] : undefined;
+  const hasBest = move.best_move_uci && move.best_move_uci !== move.uci;
+
+  if (!playedColor) return [];           // best / excellent / good — no arrows
+
+  const arrows: Arrow[] = [];
+
+  // Played move — severity colour
+  arrows.push(uciToArrow(move.uci, playedColor));
+
+  // Best move — green (only when different from played)
+  if (hasBest) {
+    arrows.push(uciToArrow(move.best_move_uci!, BEST_ARROW_COLOR));
+  }
+
+  return arrows;
+}
+
 interface Props {
   moves: MoveData[];
   currentPly: number;        // 0 = start, N = after ply N
   onPlyChange: (ply: number) => void;
   userColor?: "white" | "black" | null;
+  boardFlipped?: boolean;
+  onFlip?: () => void;
 }
 
 export default function AnalysisBoard({
@@ -28,6 +64,7 @@ export default function AnalysisBoard({
   currentPly,
   onPlyChange,
   userColor,
+  boardFlipped,
 }: Props) {
   // FEN for the current ply
   const currentFen =
@@ -37,22 +74,11 @@ export default function AnalysisBoard({
 
   const currentMove = currentPly > 0 ? moves[currentPly - 1] : null;
 
-  // Arrow: show best move for blunders/mistakes when a different move was played
-  const arrows: Arrow[] = [];
-  if (
-    currentMove &&
-    currentMove.best_move_uci &&
-    currentMove.best_move_uci !== currentMove.uci &&
-    (currentMove.classification === "blunder" ||
-      currentMove.classification === "mistake")
-  ) {
-    const uci = currentMove.best_move_uci;
-    arrows.push({
-      startSquare: uci.slice(0, 2),
-      endSquare: uci.slice(2, 4),
-      color: "rgba(91, 141, 238, 0.8)",
-    });
-  }
+  // Eval of the current position (after the move was played)
+  const evalCp   = currentMove?.eval_after_cp   ?? null;
+  const evalMate = currentMove?.eval_after_mate ?? null;
+
+  const arrows = buildArrows(currentMove);
 
   // Keyboard navigation
   useEffect(() => {
@@ -66,34 +92,44 @@ export default function AnalysisBoard({
     return () => window.removeEventListener("keydown", handleKey);
   }, [currentPly, moves.length, onPlyChange]);
 
-  // Board orientation
-  const boardOrientation =
-    userColor === "black" ? "black" : "white";
+  // Board orientation: start from user's color, then toggle if flipped
+  const baseOrientation: "white" | "black" = userColor === "black" ? "black" : "white";
+  const boardOrientation: "white" | "black" = boardFlipped
+    ? (baseOrientation === "white" ? "black" : "white")
+    : baseOrientation;
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Board + eval bar */}
-      <div className="flex items-start gap-2">
-        <EvalBar
-          evalCp={currentMove?.eval_after_cp ?? null}
-          evalMate={currentMove?.eval_after_mate ?? null}
-        />
-        <div className="flex-1">
-          <Chessboard
-            options={{
-              position: currentFen,
-              boardOrientation,
-              allowDragging: false,
-              arrows,
-              boardStyle: {
-                borderRadius: "8px",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
-              },
-              darkSquareStyle: { backgroundColor: "#4a7c59" },
-              lightSquareStyle: { backgroundColor: "#f0d9b5" },
-            }}
-          />
+      {/* Board row — eval bar absolutely overlaid to left of board */}
+      <div className="relative" style={{ paddingLeft: "26px" }}>
+        {/* Eval bar: absolute, stretches to exact board height */}
+        <div
+          className="absolute left-0 top-0 bottom-0"
+          style={{ width: "20px" }}
+        >
+          <EvalBar evalCp={evalCp} evalMate={evalMate} />
         </div>
+
+        {/* Board */}
+        <Chessboard
+          options={{
+            position: currentFen,
+            boardOrientation,
+            allowDragging: false,
+            arrows,
+            clearArrowsOnClick: false,
+            clearArrowsOnPositionChange: false,
+            showNotation: true,
+            boardStyle: {
+              borderRadius: "8px",
+              boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
+            },
+            darkSquareStyle:  { backgroundColor: "#4a7c59" },
+            lightSquareStyle: { backgroundColor: "#f0d9b5" },
+            darkSquareNotationStyle:  { color: "#f0d9b5", fontSize: "10px" },
+            lightSquareNotationStyle: { color: "#4a7c59", fontSize: "10px" },
+          }}
+        />
       </div>
 
       {/* Navigation controls */}
@@ -125,14 +161,24 @@ export default function AnalysisBoard({
           />
         </div>
 
-        <span
-          className="text-xs tabular-nums"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          {currentPly === 0
-            ? "Start"
-            : `Move ${currentMove?.move_number} (${currentMove?.color})`}
-        </span>
+        {/* Arrow legend — only shown when arrows are active */}
+        {arrows.length > 0 ? (
+          <div className="flex items-center gap-2">
+            <LegendDot color={PLAYED_ARROW_COLOR[currentMove?.classification ?? ""] ?? ""} label="Played" />
+            {arrows.length > 1 && (
+              <LegendDot color={BEST_ARROW_COLOR} label="Best" />
+            )}
+          </div>
+        ) : (
+          <span
+            className="text-xs tabular-nums"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            {currentPly === 0
+              ? "Start"
+              : `Move ${currentMove?.move_number} (${currentMove?.color})`}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -165,5 +211,19 @@ function NavButton({
     >
       {label}
     </button>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <span
+        className="inline-block rounded-full"
+        style={{ width: "8px", height: "8px", background: color }}
+      />
+      <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+        {label}
+      </span>
+    </div>
   );
 }

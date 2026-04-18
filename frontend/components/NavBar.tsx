@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import LogoMark from "@/components/LogoMark";
 
 export default function NavBar() {
   const { user, logout, loading } = useAuth();
@@ -23,10 +24,11 @@ export default function NavBar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
         <Link
           href="/"
-          className="text-lg font-semibold tracking-tight"
+          className="flex items-center gap-2.5 text-lg font-semibold tracking-tight"
           style={{ color: "var(--text-primary)" }}
         >
-          ♟ SochMate
+          <LogoMark size={20} color="white" />
+          SochMate
         </Link>
 
         <div className="flex items-center gap-4">
@@ -40,6 +42,13 @@ export default function NavBar() {
                     style={{ color: "var(--text-secondary)" }}
                   >
                     My Games
+                  </Link>
+                  <Link
+                    href="/openings"
+                    className="text-sm hidden sm:block"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Openings
                   </Link>
                   <div className="flex items-center gap-3">
                     <span

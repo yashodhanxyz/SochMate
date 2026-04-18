@@ -31,6 +31,8 @@ from app.models.move import Move
 from app.services.classifier import classify_move
 from app.services.engine import evaluate_position, uci_to_san
 from app.services.explainer import explain_move
+from app.services.opening import detect_opening
+from app.services.patterns import detect_pattern
 from app.services.pgn_parser import PGNParseError, parse_pgn
 from app.services.summarizer import MoveRecord, compute_summary
 from app.tasks.celery_app import celery
@@ -97,6 +99,19 @@ def _run_pipeline(session: Session, game: Game, start_time: float) -> None:
     game.black_elo = parsed.black_elo
     if parsed.played_at and not game.played_at:
         game.played_at = parsed.played_at
+
+    # Backfill opening info via EPD lookup when PGN headers don't include it
+    if not game.eco_code or not game.opening_name:
+        try:
+            fens = [ply.fen_after for ply in parsed.plies]
+            detected_eco, detected_name = detect_opening(fens)
+            if detected_eco and not game.eco_code:
+                game.eco_code = detected_eco
+            if detected_name and not game.opening_name:
+                game.opening_name = detected_name
+        except Exception:
+            logger.warning("Opening detection failed for game %s", game.id, exc_info=True)
+
     session.commit()
 
     # Guard: refuse to analyze excessively long games
@@ -134,6 +149,15 @@ def _run_pipeline(session: Session, game: Game, start_time: float) -> None:
             color=ply.color,
         )
 
+        # Detect missed tactical pattern (only when player deviated from best)
+        pattern_tag: str | None = None
+        if (
+            eval_before.best_move_uci
+            and eval_before.best_move_uci != ply.uci
+            and result.classification in ("blunder", "mistake", "inaccuracy")
+        ):
+            pattern_tag = detect_pattern(ply.fen_before, eval_before.best_move_uci)
+
         # Explain
         explanation = explain_move(
             classification=result.classification,
@@ -166,6 +190,7 @@ def _run_pipeline(session: Session, game: Game, start_time: float) -> None:
                 best_move_uci=eval_before.best_move_uci,
                 classification=result.classification,
                 explanation=explanation,
+                pattern_tag=pattern_tag,
             )
         )
 

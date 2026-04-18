@@ -23,6 +23,7 @@ export interface MoveData {
   best_move_uci: string | null;
   classification: MoveClassification | null;
   explanation: string | null;
+  pattern_tag: "fork" | "hanging" | "pin" | "skewer" | "discovered_attack" | "back_rank" | null;
 }
 
 export interface GameSummaryData {
@@ -68,16 +69,37 @@ export interface SubmitResponse {
   status: string;
 }
 
+export interface OpeningStatsItem {
+  opening_name: string | null;
+  eco_code: string | null;
+  games_played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  avg_accuracy: number | null;
+}
+
 export interface GameListItem {
   game_id: string;
   status: "pending" | "processing" | "done" | "failed";
-  source: "chess_com" | "manual_pgn";
+  source: "chess_com" | "lichess" | "manual_pgn";
   white_player: string | null;
   black_player: string | null;
   user_color: "white" | "black" | null;
   result: string | null;
   opening_name: string | null;
   eco_code: string | null;
+  time_control: string | null;
+  white_elo: number | null;
+  black_elo: number | null;
   played_at: string | null;
   created_at: string;
+  accuracy_white: number | null;
+  accuracy_black: number | null;
+  blunders_white: number | null;
+  blunders_black: number | null;
+  mistakes_white: number | null;
+  mistakes_black: number | null;
+  inaccuracies_white: number | null;
+  inaccuracies_black: number | null;
 }

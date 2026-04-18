@@ -2,7 +2,7 @@
 
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import { useRouter } from "next/navigation";
-import { setToken } from "@/lib/auth";
+import { useAuth } from "@/contexts/AuthContext";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
@@ -12,9 +12,9 @@ interface Props {
 }
 
 export default function GoogleSignInButton({ onError }: Props) {
+  const { loginWithToken } = useAuth();
   const router = useRouter();
 
-  // If no client ID is configured, render nothing.
   if (!CLIENT_ID) return null;
 
   async function handleSuccess(credentialResponse: CredentialResponse) {
@@ -33,10 +33,14 @@ export default function GoogleSignInButton({ onError }: Props) {
         onError?.(data?.detail ?? "Google sign-in failed.");
         return;
       }
-      setToken(data.access_token);
-      // Force a full navigation so AuthContext re-reads localStorage
+      // Update AuthContext state + localStorage in one call — this is what
+      // makes the rest of the UI (GameInput, NavBar) react immediately.
+      loginWithToken(data.access_token, {
+        user_id: data.user_id,
+        email: data.email,
+        username: data.username,
+      });
       router.push("/");
-      router.refresh();
     } catch {
       onError?.("Google sign-in failed. Please try again.");
     }

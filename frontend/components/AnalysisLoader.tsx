@@ -6,6 +6,8 @@ import { getGameStatus } from "@/lib/api";
 interface Props {
   gameId: string;
   onDone?: () => void;
+  /** When true, runs polling but renders nothing (parent shows skeleton). */
+  silent?: boolean;
 }
 
 const STATUS_MESSAGES: Record<string, string> = {
@@ -13,7 +15,7 @@ const STATUS_MESSAGES: Record<string, string> = {
   processing: "Running Stockfish on each move…",
 };
 
-export default function AnalysisLoader({ gameId, onDone }: Props) {
+export default function AnalysisLoader({ gameId, onDone, silent }: Props) {
   const [status, setStatus] = useState<string>("pending");
   const [error, setError] = useState<string | null>(null);
   const [dots, setDots] = useState(0);
@@ -53,6 +55,9 @@ export default function AnalysisLoader({ gameId, onDone }: Props) {
     poll();
     return () => clearTimeout(timer);
   }, [gameId, onDone]);
+
+  // Silent mode: polling runs but no UI is rendered here (parent owns the UI)
+  if (silent) return null;
 
   if (error) {
     return (

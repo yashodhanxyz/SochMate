@@ -20,8 +20,9 @@ class Game(Base):
 
     # Raw input
     pgn_raw: Mapped[str] = mapped_column(Text, nullable=False)
-    source: Mapped[str] = mapped_column(String(20), nullable=False)  # chess_com | manual_pgn
+    source: Mapped[str] = mapped_column(String(20), nullable=False)  # chess_com | lichess | manual_pgn
     chess_com_game_id: Mapped[str | None] = mapped_column(String, unique=True, index=True)
+    lichess_game_id: Mapped[str | None] = mapped_column(String, index=True)
 
     # Game metadata parsed from PGN headers
     white_player: Mapped[str | None] = mapped_column(String)

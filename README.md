@@ -8,16 +8,20 @@ A chess improvement tool that analyzes your games move by move using the Stockfi
 
 ## What it does
 
-You paste a Chess.com game link or raw PGN. SochMate:
+You paste a Chess.com game link, a Lichess game link, or raw PGN. SochMate:
 
 1. Parses the PGN and reconstructs every position
 2. Runs Stockfish on each position before and after the move to get the centipawn evaluation
 3. Calculates how much each move changed the evaluation (the "centipawn loss")
 4. Classifies every move — **Best, Excellent, Good, Inaccuracy, Mistake, Blunder**
 5. Generates a short explanation for each classification
-6. Computes an accuracy score for both players (same formula Chess.com uses)
-7. Identifies the critical moment — the single move with the biggest evaluation swing
-8. Stores everything to your account so you can review your games over time
+6. Detects missed tactical patterns — fork, pin, skewer, hanging piece, discovered attack, back-rank mate
+7. Computes an accuracy score for both players (same formula Chess.com uses)
+8. Identifies the critical moment — the single move with the biggest evaluation swing
+9. Detects the opening played via EPD position lookup (194 openings, transposition-aware)
+10. Stores everything to your account so you can review your games over time
+
+Supports **Chess.com URLs**, **Lichess URLs**, and **raw PGN** as input. Color is auto-detected from the username in the PGN headers, or can be overridden.
 
 ---
 
@@ -35,7 +39,7 @@ You paste a Chess.com game link or raw PGN. SochMate:
 | [Celery](https://docs.celeryq.dev) | 5.4 | Async task queue for Stockfish analysis |
 | [Redis](https://redis.io) | — | Celery broker + result backend |
 | [python-chess](https://python-chess.readthedocs.io) | 1.10 | PGN parsing, board reconstruction, Stockfish interface |
-| [httpx](https://www.python-httpx.org) | 0.27 | HTTP client for Chess.com API |
+| [httpx](https://www.python-httpx.org) | 0.27 | HTTP client for Chess.com and Lichess APIs |
 | [PyJWT](https://pyjwt.readthedocs.io) | 2.8 | JWT creation and verification |
 | [bcrypt](https://pypi.org/project/bcrypt) | 5.0 | Password hashing |
 | [google-auth](https://google-auth.readthedocs.io) | 2.29 | Google OAuth id_token verification |
@@ -71,9 +75,10 @@ You paste a Chess.com game link or raw PGN. SochMate:
 ┌─────────────────────────────────────────────────────────┐
 │                      Browser                            │
 │  Next.js (App Router)                                   │
-│  • /                  — paste PGN or Chess.com URL      │
-│  • /analyze/[gameId]  — move-by-move analysis view      │
-│  • /games             — your game history               │
+│  • /                  — paste PGN, Chess.com URL, or Lichess URL
+│  • /analyze/[gameId]  — move-by-move analysis with eval bar + graph
+│  • /games             — your game history with accuracy and opening info
+│  • /openings          — opening performance breakdown
 │  • /login  /register  — auth (email + Google OAuth)     │
 └───────────────────────┬─────────────────────────────────┘
                         │ HTTP  (Authorization: Bearer JWT)
@@ -86,10 +91,11 @@ You paste a Chess.com game link or raw PGN. SochMate:
 │  POST /api/auth/google   ← verifies Google id_token     │
 │  GET  /api/auth/me                                      │
 │                                                         │
-│  POST /api/games         ← parse PGN, enqueue task      │
+│  POST /api/games         ← parse PGN/URL, enqueue task  │
 │  GET  /api/games/{id}                                   │
 │  GET  /api/games/{id}/status                            │
 │  GET  /api/users/me/games                               │
+│  GET  /api/users/me/openings                            │
 └─────────────┬───────────────────────┬───────────────────┘
               │ asyncpg               │ Celery task
               ▼                       ▼
@@ -119,13 +125,16 @@ You paste a Chess.com game link or raw PGN. SochMate:
 Every submitted game goes through this synchronous pipeline inside a Celery worker:
 
 ```
-PGN text
-  └─ pgn_parser.py     → ParsedGame (plies with FEN before/after)
-       └─ engine.py    → PositionEval (cp, mate, best_move_uci) × 2 per ply
-            └─ classifier.py  → MoveClassification + eval_delta_cp
-                 └─ explainer.py    → one-sentence explanation
-                      └─ summarizer.py → accuracy %, blunder/mistake counts, critical moment
-                           └─ tasks/analysis.py → persists everything in one DB transaction
+PGN / Chess.com URL / Lichess URL
+  └─ chess_com.py / lichess.py  → fetch PGN + metadata
+       └─ pgn_parser.py         → ParsedGame (plies with FEN before/after)
+            └─ opening.py       → detect opening via EPD lookup
+                 └─ engine.py   → PositionEval (cp, mate, best_move_uci) × 2 per ply
+                      └─ classifier.py  → MoveClassification + eval_delta_cp
+                           └─ patterns.py    → tactical pattern tag (fork/pin/skewer/…)
+                                └─ explainer.py    → one-sentence explanation
+                                     └─ summarizer.py → accuracy %, blunder/mistake counts, critical moment
+                                          └─ tasks/analysis.py → persists everything in one DB transaction
 ```
 
 **Move classification thresholds** (centipawn loss from the moving player's perspective):
@@ -166,7 +175,7 @@ SochMate/
 │   │   │   ├── auth.py         # register, login, google, /me
 │   │   │   ├── deps.py         # get_current_user FastAPI dependency
 │   │   │   ├── games.py        # submit + retrieve games
-│   │   │   └── users.py        # game history
+│   │   │   └── users.py        # game history, opening stats
 │   │   ├── models/
 │   │   │   ├── user.py         # User ORM model
 │   │   │   ├── game.py         # Game ORM model
@@ -176,10 +185,13 @@ SochMate/
 │   │   │   └── game.py         # Pydantic request/response schemas
 │   │   ├── services/
 │   │   │   ├── auth.py         # bcrypt hashing + JWT sign/verify
-│   │   │   ├── chess_com.py    # Chess.com API fetcher with retry
+│   │   │   ├── chess_com.py    # Chess.com API fetcher with retry + redirect following
 │   │   │   ├── classifier.py   # centipawn loss → classification
 │   │   │   ├── engine.py       # Stockfish singleton wrapper
 │   │   │   ├── explainer.py    # rule-based move explanation generator
+│   │   │   ├── lichess.py      # Lichess API fetcher (game export endpoint)
+│   │   │   ├── opening.py      # EPD-based opening lookup (194 openings, transposition-aware)
+│   │   │   ├── patterns.py     # tactical pattern detectors (fork, pin, skewer, hanging, discovered, back-rank)
 │   │   │   ├── pgn_parser.py   # PGN → ParsedGame (plies + FENs)
 │   │   │   └── summarizer.py   # accuracy, counts, critical moment
 │   │   ├── tasks/
@@ -191,7 +203,8 @@ SochMate/
 │   ├── migrations/
 │   │   └── versions/
 │   │       ├── 0001_initial_schema.py
-│   │       └── 0002_add_auth_fields.py
+│   │       ├── 0002_add_auth_fields.py
+│   │       └── 0003_add_lichess_support.py
 │   ├── tests/
 │   │   ├── test_classifier.py
 │   │   ├── test_pgn_parser.py
@@ -204,10 +217,13 @@ SochMate/
 │   ├── app/
 │   │   ├── analyze/[gameId]/
 │   │   │   ├── page.tsx        # server component shell
-│   │   │   └── AnalysisView.tsx # client — board + move list + summary
+│   │   │   └── AnalysisView.tsx # client — board + eval bar + graph + move list + summary
 │   │   ├── games/
 │   │   │   ├── page.tsx
 │   │   │   └── GamesClient.tsx # game history dashboard
+│   │   ├── openings/
+│   │   │   ├── page.tsx
+│   │   │   └── OpeningsClient.tsx # opening performance breakdown
 │   │   ├── login/page.tsx
 │   │   ├── register/page.tsx
 │   │   ├── layout.tsx          # AuthProvider + GoogleProvider + NavBar
@@ -216,14 +232,19 @@ SochMate/
 │   ├── components/
 │   │   ├── AnalysisBoard.tsx   # react-chessboard wrapper + arrow overlays
 │   │   ├── AnalysisLoader.tsx  # polls /status every 2s during analysis
-│   │   ├── EvalBar.tsx         # vertical evaluation bar
+│   │   ├── AnalysisSkeleton.tsx # shimmer loading state for analysis page
+│   │   ├── EvalBar.tsx         # vertical evaluation bar (absolute-positioned, height matches board)
+│   │   ├── EvalGraph.tsx       # full-width SVG evaluation graph with click-to-jump and classification dots
 │   │   ├── GameInput.tsx       # PGN/URL textarea + color picker
 │   │   ├── GameSummary.tsx     # accuracy + classification count display
 │   │   ├── GoogleProvider.tsx  # client wrapper for GoogleOAuthProvider
 │   │   ├── GoogleSignInButton.tsx # Google Identity Services button
+│   │   ├── LogoMark.tsx        # SVG logo mark
 │   │   ├── MoveFeedback.tsx    # single-move explanation panel
-│   │   ├── MoveList.tsx        # scrollable move list with classification colors
-│   │   └── NavBar.tsx          # auth-aware navigation header
+│   │   ├── MoveList.tsx        # scrollable move list with classification colors and keyboard navigation
+│   │   ├── NavBar.tsx          # auth-aware navigation header
+│   │   ├── PlayerHeader.tsx    # player avatars, ELO, result badges, flip button
+│   │   └── RightPanel.tsx      # tabbed panel (Moves / Summary) with missed tactics section
 │   ├── contexts/
 │   │   └── AuthContext.tsx     # JWT in localStorage, login/logout/register
 │   ├── lib/
@@ -417,7 +438,7 @@ Authorization: Bearer <jwt>
 
 The frontend `lib/api.ts` `request()` function reads the token from `localStorage` and attaches it automatically. The backend `app/api/deps.py` `get_current_user` dependency validates the token on every protected route.
 
-**Protected routes**: `POST /api/games`, `GET /api/users/me/games`, `GET /api/auth/me`  
+**Protected routes**: `POST /api/games`, `GET /api/users/me/games`, `GET /api/users/me/openings`, `GET /api/auth/me`  
 **Public routes**: `GET /api/games/{id}`, `GET /api/games/{id}/status`, `GET /health`
 
 ---
@@ -453,7 +474,7 @@ GET /api/auth/me
 POST /api/games
   Auth:    Bearer token
   Body:    { input, user_color? }
-           input = Chess.com URL or raw PGN
+           input = Chess.com URL, Lichess URL, or raw PGN
            user_color = "white" | "black" | null (auto-detect)
   Returns: { game_id, status: "pending" }
   Status:  202 Accepted | 422 Invalid PGN
@@ -469,6 +490,12 @@ GET /api/games/{game_id}
 GET /api/users/me/games
   Auth:    Bearer token
   Returns: list of game summaries (newest first, max 50)
+
+GET /api/users/me/openings
+  Auth:    Bearer token
+  Returns: list of opening performance objects
+           { opening_name, eco_code, games_played, wins, draws, losses, avg_accuracy }
+           sorted by games_played desc
 ```
 
 ---
@@ -490,8 +517,9 @@ games
   id              UUID (PK)
   user_id         UUID (FK → users)
   pgn_raw         TEXT
-  source          TEXT          -- "chess_com" | "manual_pgn"
+  source          TEXT          -- "chess_com" | "lichess" | "manual_pgn"
   chess_com_game_id TEXT UNIQUE
+  lichess_game_id TEXT UNIQUE
   white_player    TEXT
   black_player    TEXT
   user_color      TEXT          -- "white" | "black"
@@ -525,7 +553,7 @@ moves
   best_move_uci   TEXT
   classification  TEXT          -- "best"|"excellent"|"good"|"inaccuracy"|"mistake"|"blunder"
   explanation     TEXT
-  pattern_tag     TEXT          -- reserved for V2 pattern detection
+  pattern_tag     TEXT          -- "fork"|"pin"|"skewer"|"hanging"|"discovered_attack"|"back_rank"
 
 game_summaries
   id              UUID (PK)
@@ -593,23 +621,30 @@ Set these environment variables in Railway:
 - [x] Stockfish evaluation pipeline (async via Celery)
 - [x] Move classification (Best → Blunder)
 - [x] Rule-based move explanations
+- [x] Tactical pattern detection (fork, pin, skewer, hanging piece, discovered attack, back-rank)
 - [x] Game accuracy scores (Chess.com formula)
-- [x] Chess.com game URL ingestion with retry
-- [x] Interactive analysis board with eval bar + best-move arrows
+- [x] Chess.com game URL ingestion with retry + redirect following
+- [x] Lichess game URL ingestion
+- [x] Opening detection via EPD lookup (194 openings, transposition-aware)
+- [x] Interactive analysis board with eval bar, best-move arrows, played-move arrows
+- [x] Full-width evaluation graph with click-to-jump and classification dots
 - [x] Move list with classification colors and keyboard navigation
+- [x] Tabbed right panel (Moves / Summary) with missed tactics section
+- [x] Player avatars, ELO display, result banner
 - [x] Email/password authentication (bcrypt + JWT)
 - [x] Google OAuth sign-in
-- [x] Game history dashboard
+- [x] Game history dashboard with accuracy, opening, ELO, source badge
+- [x] Opening performance breakdown by opening
 - [x] Docker Compose for local dev
 - [x] Railway + Vercel deployment configs
 
-## What's coming (V2 roadmap)
+## What's coming
 
-- [ ] **Pattern detection** — surface recurring mistakes across your game history (e.g. "you blunder in endgames 4 times this month")
-- [ ] **Opening detection** — display the opening name prominently, filter your history by opening
-- [ ] **Deploy** — live at a real URL
-- [ ] **Chess.com auto-import** — connect your Chess.com username and import recent games in bulk
-- [ ] **AI explanations** — richer natural-language explanations via Claude API (currently rule-based to keep it free)
+- [ ] **Accuracy trend** — chart showing accuracy over time across your games
+- [ ] **Chess.com auto-import** — connect your username and bulk-import recent games
+- [ ] **Mobile responsiveness** — full polish for phone-sized screens
+- [ ] **AI explanations** — richer natural-language explanations via Claude API (currently rule-based)
+- [ ] **Public share links** — share a game analysis without requiring login
 
 ---
 

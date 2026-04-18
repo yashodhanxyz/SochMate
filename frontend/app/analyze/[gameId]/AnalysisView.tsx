@@ -4,10 +4,11 @@ import { useState, useCallback, useEffect } from "react";
 import { getGameStatus, getGame, ApiError } from "@/lib/api";
 import type { GameData } from "@/types/analysis";
 import AnalysisLoader from "@/components/AnalysisLoader";
+import AnalysisSkeleton from "@/components/AnalysisSkeleton";
 import AnalysisBoard from "@/components/AnalysisBoard";
-import MoveList from "@/components/MoveList";
-import MoveFeedback from "@/components/MoveFeedback";
-import GameSummary from "@/components/GameSummary";
+import PlayerHeader from "@/components/PlayerHeader";
+import RightPanel from "@/components/RightPanel";
+import EvalGraph from "@/components/EvalGraph";
 import Link from "next/link";
 
 interface Props {
@@ -15,15 +16,20 @@ interface Props {
 }
 
 type PageState =
-  | { phase: "loading" }
+  | { phase: "loading"; statusMessage?: string }
   | { phase: "done"; game: GameData }
   | { phase: "error"; message: string };
+
+const STATUS_MESSAGES: Record<string, string> = {
+  pending: "Waiting for an analysis worker…",
+  processing: "Running Stockfish on each move…",
+};
 
 export default function AnalysisView({ gameId }: Props) {
   const [state, setState] = useState<PageState>({ phase: "loading" });
   const [currentPly, setCurrentPly] = useState(0);
+  const [boardFlipped, setBoardFlipped] = useState(false);
 
-  // On mount: check if already done (avoids unnecessary loader flash)
   useEffect(() => {
     async function bootstrap() {
       try {
@@ -36,19 +42,21 @@ export default function AnalysisView({ gameId }: Props) {
             phase: "error",
             message: status.error_message ?? "Analysis failed.",
           });
+        } else {
+          setState({
+            phase: "loading",
+            statusMessage: STATUS_MESSAGES[status.status] ?? "Analyzing…",
+          });
         }
-        // pending/processing → stay in loading phase, AnalysisLoader will poll
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
           setState({ phase: "error", message: "Game not found." });
         }
-        // Other errors: stay in loading, AnalysisLoader will handle them
       }
     }
     bootstrap();
   }, [gameId]);
 
-  // Called by AnalysisLoader when status becomes "done"
   const handleAnalysisDone = useCallback(async () => {
     try {
       const game = await getGame(gameId);
@@ -78,14 +86,19 @@ export default function AnalysisView({ gameId }: Props) {
   }
 
   if (state.phase === "loading") {
-    return <AnalysisLoader gameId={gameId} onDone={handleAnalysisDone} />;
+    return (
+      <>
+        <AnalysisLoader gameId={gameId} onDone={handleAnalysisDone} silent />
+        <AnalysisSkeleton statusMessage={state.statusMessage} />
+      </>
+    );
   }
 
   const { game } = state;
-  const currentMove = currentPly > 0 ? game.moves[currentPly - 1] : null;
+  const flipBoard = () => setBoardFlipped((f) => !f);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {/* Back link */}
       <Link
         href="/"
@@ -95,37 +108,44 @@ export default function AnalysisView({ gameId }: Props) {
         ← Analyze another game
       </Link>
 
-      {/* Main layout: stacked on mobile, side-by-side on desktop (lg+) */}
+      {/* Main two-column layout */}
       <div className="analysis-grid">
-        {/* Left: board + feedback */}
-        <div className="flex flex-col gap-4">
+
+        {/* ── Left: players + board ── */}
+        <div className="flex flex-col gap-2">
+          <PlayerHeader
+            whiteName={game.white_player}
+            blackName={game.black_player}
+            whiteElo={game.white_elo}
+            blackElo={game.black_elo}
+            result={game.result}
+            boardFlipped={boardFlipped}
+            onFlip={flipBoard}
+          />
           <AnalysisBoard
             moves={game.moves}
             currentPly={currentPly}
             onPlyChange={setCurrentPly}
             userColor={game.user_color}
+            boardFlipped={boardFlipped}
+            onFlip={flipBoard}
           />
-          <MoveFeedback move={currentMove} />
         </div>
 
-        {/* Right: move list */}
-        <div className="flex flex-col gap-4">
-          <MoveList
-            moves={game.moves}
-            currentPly={currentPly}
-            onPlyChange={setCurrentPly}
-          />
-        </div>
+        {/* ── Right: tabbed panel ── */}
+        <RightPanel
+          game={game}
+          currentPly={currentPly}
+          onPlyChange={setCurrentPly}
+        />
       </div>
 
-      {/* Summary — full width below */}
-      {game.summary && (
-        <GameSummary
-          game={game}
-          summary={game.summary}
-          userColor={game.user_color}
-        />
-      )}
+      {/* Eval graph — full width below the board+panel grid */}
+      <EvalGraph
+        moves={game.moves}
+        currentPly={currentPly}
+        onPlyChange={setCurrentPly}
+      />
     </div>
   );
 }

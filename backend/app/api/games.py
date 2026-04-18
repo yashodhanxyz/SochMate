@@ -27,6 +27,7 @@ from app.schemas.game import (
     GameSubmitResponse,
 )
 from app.services.chess_com import ChessComError, fetch_pgn_from_url, is_chess_com_url
+from app.services.lichess import LichessError, fetch_pgn_from_url as lichess_fetch_pgn, is_lichess_url
 from app.services.pgn_parser import PGNParseError, parse_pgn
 from app.tasks.analysis import analyze_game
 
@@ -51,6 +52,8 @@ async def submit_game(
     """
     # --- Resolve PGN ---
     chess_com_game_id: str | None = None
+    lichess_game_id: str | None = None
+    url_color_hint: str | None = None  # color extracted from URL path
 
     if is_chess_com_url(body.input):
         try:
@@ -58,6 +61,12 @@ async def submit_game(
         except ChessComError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
         source = "chess_com"
+    elif is_lichess_url(body.input):
+        try:
+            pgn_raw, lichess_game_id, url_color_hint = lichess_fetch_pgn(body.input)
+        except LichessError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        source = "lichess"
     else:
         pgn_raw = body.input.strip()
         source = "manual_pgn"
@@ -79,8 +88,20 @@ async def submit_game(
         if existing and existing.status == "done":
             return GameSubmitResponse(game_id=existing.id, status=existing.status)
 
-    # Infer user_color from Chess.com username if not provided
+    if lichess_game_id:
+        existing = await db.scalar(
+            select(Game).where(
+                Game.lichess_game_id == lichess_game_id,
+                Game.user_id == current_user.id,
+            )
+        )
+        if existing and existing.status == "done":
+            return GameSubmitResponse(game_id=existing.id, status=existing.status)
+
+    # Infer user_color (priority: explicit body > URL color hint > username match)
     user_color = body.user_color
+    if user_color is None and url_color_hint:
+        user_color = url_color_hint
     if user_color is None and current_user.chess_com_username:
         username = current_user.chess_com_username.lower()
         if parsed.white_player and parsed.white_player.lower() == username:
@@ -94,6 +115,7 @@ async def submit_game(
         pgn_raw=pgn_raw,
         source=source,
         chess_com_game_id=chess_com_game_id,
+        lichess_game_id=lichess_game_id,
         white_player=parsed.white_player,
         black_player=parsed.black_player,
         user_color=user_color,

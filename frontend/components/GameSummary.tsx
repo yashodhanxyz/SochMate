@@ -25,13 +25,7 @@ export default function GameSummary({ game, summary, userColor }: Props) {
   const resultLabel = formatResult(game.result, playerColor);
 
   return (
-    <div
-      className="rounded-xl p-5 flex flex-col gap-5"
-      style={{
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-      }}
-    >
+    <div className="flex flex-col gap-5">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex flex-col gap-1">

@@ -1,11 +1,13 @@
 import GameInput from "@/components/GameInput";
+import LogoMark from "@/components/LogoMark";
 
 export default function Home() {
   return (
     <div className="flex flex-col items-center justify-center" style={{ minHeight: "70vh" }}>
       <div className="w-full max-w-xl flex flex-col gap-8">
         {/* Hero */}
-        <div className="text-center flex flex-col gap-3">
+        <div className="text-center flex flex-col items-center gap-4">
+          <LogoMark size={48} color="white" />
           <h1
             className="text-3xl font-bold tracking-tight"
             style={{ color: "var(--text-primary)" }}

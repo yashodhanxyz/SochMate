@@ -47,6 +47,7 @@ class MoveResponse(BaseModel):
     best_move_uci: str | None
     classification: str | None
     explanation: str | None
+    pattern_tag: str | None  # fork | hanging | pin | skewer | discovered_attack | back_rank
 
     model_config = {"from_attributes": True}
 
@@ -101,6 +102,17 @@ class GameSubmitResponse(BaseModel):
     status: str
 
 
+class OpeningStatsItem(BaseModel):
+    """Aggregated performance stats for a single opening."""
+    opening_name: str | None
+    eco_code: str | None
+    games_played: int
+    wins: int
+    draws: int
+    losses: int
+    avg_accuracy: float | None
+
+
 class GameListItemResponse(BaseModel):
     """Lightweight game summary for the dashboard list."""
     game_id: uuid.UUID
@@ -112,7 +124,19 @@ class GameListItemResponse(BaseModel):
     result: str | None
     opening_name: str | None
     eco_code: str | None
+    time_control: str | None
+    white_elo: int | None
+    black_elo: int | None
     played_at: datetime | None
     created_at: datetime
+    # Flattened from GameSummary (None when analysis not done)
+    accuracy_white: float | None = None
+    accuracy_black: float | None = None
+    blunders_white: int | None = None
+    blunders_black: int | None = None
+    mistakes_white: int | None = None
+    mistakes_black: int | None = None
+    inaccuracies_white: int | None = None
+    inaccuracies_black: int | None = None
 
     model_config = {"from_attributes": True}

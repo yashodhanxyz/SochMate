@@ -2,6 +2,7 @@ import type {
   GameData,
   GameListItem,
   GameStatusData,
+  OpeningStatsItem,
   SubmitResponse,
 } from "@/types/analysis";
 import { getToken } from "@/lib/auth";
@@ -59,4 +60,8 @@ export async function getGame(gameId: string): Promise<GameData> {
 
 export async function listMyGames(): Promise<GameListItem[]> {
   return request<GameListItem[]>("/api/users/me/games");
+}
+
+export async function getOpeningStats(): Promise<OpeningStatsItem[]> {
+  return request<OpeningStatsItem[]>("/api/users/me/openings");
 }

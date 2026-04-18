@@ -23,6 +23,8 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<string>;
   /** Returns the token on success, throws on error. */
   register: (email: string, password: string, username?: string) => Promise<string>;
+  /** Set auth state directly from a token response (used by Google OAuth). */
+  loginWithToken: (accessToken: string, user: AuthUser) => void;
   logout: () => void;
   loading: boolean;
 }
@@ -79,6 +81,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const loginWithToken = useCallback((accessToken: string, authUser: AuthUser) => {
+    setToken(accessToken);
+    setTokenState(accessToken);
+    setUser(authUser);
+  }, []);
+
   const logout = useCallback(() => {
     clearToken();
     setTokenState(null);
@@ -86,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, login, register, loginWithToken, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

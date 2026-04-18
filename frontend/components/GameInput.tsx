@@ -17,7 +17,10 @@ export default function GameInput() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isUrl = input.trim().toLowerCase().includes("chess.com/game/");
+  const trimmed = input.trim().toLowerCase();
+  const isUrl =
+    trimmed.includes("chess.com/game/") ||
+    /lichess\.org\/[a-z0-9]{8}/i.test(trimmed);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -79,7 +82,7 @@ export default function GameInput() {
           className="text-sm font-medium"
           style={{ color: "var(--text-secondary)" }}
         >
-          Chess.com game link or PGN
+          Chess.com or Lichess game link, or PGN
         </label>
         <textarea
           id="game-input"
@@ -87,7 +90,7 @@ export default function GameInput() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={
-            "Paste a Chess.com game URL:\nhttps://www.chess.com/game/live/...\n\nOr paste PGN directly:\n1. e4 e5 2. Nf3 Nc6 ..."
+            "Paste a game URL:\nhttps://www.chess.com/game/live/...\nhttps://lichess.org/abc123de\n\nOr paste PGN directly:\n1. e4 e5 2. Nf3 Nc6 ..."
           }
           disabled={loading}
           className="w-full rounded-lg px-4 py-3 text-sm font-mono resize-y focus:outline-none transition-colors"
@@ -131,7 +134,8 @@ export default function GameInput() {
         </div>
         {isUrl && userColor === null && (
           <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-            We&apos;ll detect your color from the URL automatically.
+            We&apos;ll detect your color from the URL automatically.{" "}
+            For Lichess, share the link from your perspective (e.g. lichess.org/…/white).
           </p>
         )}
       </div>

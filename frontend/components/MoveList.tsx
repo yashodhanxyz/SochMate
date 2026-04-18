@@ -25,24 +25,8 @@ export default function MoveList({ moves, currentPly, onPlyChange }: Props) {
   }
 
   return (
-    <div
-      className="rounded-xl overflow-hidden"
-      style={{
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-      }}
-    >
-      <div
-        className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
-        style={{
-          color: "var(--text-secondary)",
-          borderBottom: "1px solid var(--border)",
-        }}
-      >
-        Moves
-      </div>
-
-      <div className="overflow-y-auto" style={{ maxHeight: "420px" }}>
+    <div className="overflow-hidden">
+      <div className="overflow-y-auto" style={{ maxHeight: "360px" }}>
         <table className="w-full text-sm border-collapse">
           <tbody>
             {pairs.map(([white, black]) => (
@@ -95,8 +79,18 @@ interface MoveCellProps {
   ref?: React.Ref<HTMLButtonElement> | null;
 }
 
+const PATTERN_ICONS: Record<string, string> = {
+  fork: "⑂",
+  hanging: "⊗",
+  pin: "📌",
+  skewer: "⟹",
+  discovered_attack: "◈",
+  back_rank: "♜",
+};
+
 function MoveCell({ move, isActive, onClick, ref }: MoveCellProps) {
   const cfg = getConfig(move.classification);
+  const patternIcon = move.pattern_tag ? PATTERN_ICONS[move.pattern_tag] : null;
 
   return (
     <button
@@ -109,7 +103,7 @@ function MoveCell({ move, isActive, onClick, ref }: MoveCellProps) {
         color: isActive ? "#fff" : "var(--text-primary)",
         cursor: "pointer",
       }}
-      title={move.explanation ?? undefined}
+      title={move.pattern_tag ? `Missed tactic: ${move.pattern_tag.replace("_", " ")}` : move.explanation ?? undefined}
     >
       {/* SAN */}
       <span className="font-medium">{move.san}</span>
@@ -122,6 +116,13 @@ function MoveCell({ move, isActive, onClick, ref }: MoveCellProps) {
           title={cfg.label}
         >
           {cfg.symbol}
+        </span>
+      )}
+
+      {/* Pattern icon */}
+      {patternIcon && !isActive && (
+        <span className="text-xs ml-auto opacity-70" title={move.pattern_tag?.replace("_", " ")}>
+          {patternIcon}
         </span>
       )}
     </button>
